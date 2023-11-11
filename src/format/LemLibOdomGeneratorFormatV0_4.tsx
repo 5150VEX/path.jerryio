@@ -1,26 +1,20 @@
 import { makeAutoObservable, reaction, action, intercept } from "mobx";
 import { getAppStores } from "../core/MainApp";
-import { ValidateNumber, makeId, parseFormula } from "../core/Util";
+import { ValidateNumber, makeId } from "../core/Util";
 import { Path, Segment, Vector } from "../core/Path";
-import { UnitOfLength, UnitConverter, Quantity, UnitOfAngle } from "../core/Unit";
+import { UnitOfLength, UnitConverter, Quantity } from "../core/Unit";
 import { GeneralConfig, PathConfig, convertGeneralConfigUOL } from "./Config";
 import { Format, PathFileData } from "./Format";
 import { NumberRange, ValidateNumberRange } from "../component/RangeSlider";
 import { Exclude, Expose, Type } from "class-transformer";
 import { IsBoolean, IsObject, IsPositive, ValidateNested } from "class-validator";
-import {
-  PointCalculationResult,
-  fromHeadingInDegreeToAngleInRadian,
-  getPathPoints,
-  getDiscretePoints,
-  fromDegreeToRadian
-} from "../core/Calculation";
+import { PointCalculationResult, getPathPoints, getDiscretePoints, fromDegreeToRadian } from "../core/Calculation";
 import { FieldImageOriginType, FieldImageSignatureAndOrigin, getDefaultBuiltInFieldImage } from "../core/Asset";
 import { CancellableCommand, HistoryEventMap, UpdateProperties } from "../core/Command";
-import { ObserverInput, clampQuantity } from "../component/ObserverInput";
+import { ObserverInput } from "../component/ObserverInput";
 import { Box, Typography } from "@mui/material";
-import { CoordinateWithHeading, euclideanRotation } from "../core/Coordinate";
-import { CodePointBuffer, Int, NumberUOA, NumberUOL } from "../token/Tokens";
+import { euclideanRotation } from "../core/Coordinate";
+import { CodePointBuffer, Int } from "../token/Tokens";
 import { ObserverCheckbox } from "../component/ObserverCheckbox";
 
 // observable class
@@ -230,7 +224,6 @@ export class LemLibOdomGeneratorFormatV0_4 implements Format {
     if (path === undefined) throw new Error("No path to export");
     if (path.segments.length === 0) throw new Error("No segment to export");
 
-    
     const uc = new UnitConverter(this.gc.uol, UnitOfLength.Inch);
     const points = getDiscretePoints(path);
 
