@@ -1,6 +1,7 @@
 {
   "name": "path.jerryio",
   "version": "0.4.1",
+  "homepage": "https://5150vex.github.io/path.jerryio",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.11.0",
@@ -63,10 +64,13 @@
     "@babel/plugin-transform-private-property-in-object": "^7.23.3",
     "@craco/craco": "^7.1.0",
     "copy-webpack-plugin": "^11.0.0",
+    "gh-pages": "^6.0.0",
     "prettier": "2.8.8",
     "react-scripts": "5.0.1"
   },
   "scripts": {
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build",
     "start": "craco start",
     "build": "craco build",
     "test": "craco test",
