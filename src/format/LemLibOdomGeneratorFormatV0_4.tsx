@@ -2,7 +2,7 @@ import { makeAutoObservable, reaction, action, intercept } from "mobx";
 import { getAppStores } from "../core/MainApp";
 import { ValidateNumber, makeId, parseFormula } from "../core/Util";
 import { Path, Segment, Vector } from "../core/Path";
-import { UnitOfLength, UnitConverter, Quantity } from "../core/Unit";
+import { UnitOfLength, UnitConverter, Quantity, UnitOfAngle } from "../core/Unit";
 import { GeneralConfig, PathConfig, convertGeneralConfigUOL } from "./Config";
 import { Format, PathFileData } from "./Format";
 import { NumberRange, ValidateNumberRange } from "../component/RangeSlider";
@@ -17,10 +17,11 @@ import {
 } from "../core/Calculation";
 import { FieldImageOriginType, FieldImageSignatureAndOrigin, getDefaultBuiltInFieldImage } from "../core/Asset";
 import { CancellableCommand, HistoryEventMap, UpdateProperties } from "../core/Command";
-import { ObserverInput } from "../component/ObserverInput";
+import { ObserverInput, clampQuantity } from "../component/ObserverInput";
 import { Box, Typography } from "@mui/material";
-import { euclideanRotation } from "../core/Coordinate";
-import { CodePointBuffer, Int } from "../token/Tokens";
+import { CoordinateWithHeading, euclideanRotation } from "../core/Coordinate";
+import { CodePointBuffer, Int, NumberUOA, NumberUOL } from "../token/Tokens";
+import { ObserverCheckbox } from "../component/ObserverCheckbox";
 
 // observable class
 class GeneralConfigImpl implements GeneralConfig {
@@ -55,6 +56,8 @@ class GeneralConfigImpl implements GeneralConfig {
   chassisName: string = "chassis";
   @Expose()
   movementTimeout: number = 5000;
+  @Expose()
+  fieldOrigin: CoordinateWithHeading = { x: 0, y: 0, heading: 0 };
   @Exclude()
   private format_: LemLibOdomGeneratorFormatV0_4;
 
@@ -90,36 +93,95 @@ class GeneralConfigImpl implements GeneralConfig {
       <>
         <Box className="panel-box">
           <Typography sx={{ marginTop: "16px" }}>Export Settings</Typography>
-          <Box className="flex-editor-panel">
-          <ObserverInput
-            label="Chassis Name"
-            getValue={() => this.chassisName}
-            setValue={(value: string) => {
-              app.history.execute(
-                `Change chassis variable name`,
-                new UpdateProperties(this as any, { chassisName: value })
-              );
-            }}
-            isValidIntermediate={() => true}
-            isValidValue={(candidate: string) => candidate !== ""}
-            sx={{ marginTop: "16px" }}
-          />
-          <ObserverInput
-            label="Movement Timeout"
-            getValue={() => this.movementTimeout.toString() }
-            setValue={(value: string) => {
-              const parsedValue = parseInt(Int.parse(new CodePointBuffer(value))!.value);
-              app.history.execute(
-                `Change default movement timeout to ${parsedValue}`,
-                new UpdateProperties(this as any, { movementTimeout: parsedValue })
-              );
-            }}
-            isValidIntermediate={() => true}
-            isValidValue={(candidate: string) => Int.parse(new CodePointBuffer(candidate)) !== null }
-            sx={{ marginTop: "16px" }}
-            numeric
-          />
+          <Box className="flex-editor-panel" sx={{ marginTop: "16px" }}>
+            <ObserverInput
+              label="Chassis Name"
+              getValue={() => this.chassisName}
+              setValue={(value: string) => {
+                app.history.execute(
+                  `Change chassis variable name`,
+                  new UpdateProperties(this as any, { chassisName: value })
+                );
+              }}
+              isValidIntermediate={() => true}
+              isValidValue={(candidate: string) => candidate !== ""}
+            />
+            <ObserverInput
+              label="Movement Timeout"
+              getValue={() => this.movementTimeout.toString()}
+              setValue={(value: string) => {
+                const parsedValue = parseInt(Int.parse(new CodePointBuffer(value))!.value);
+                app.history.execute(
+                  `Change default movement timeout to ${parsedValue}`,
+                  new UpdateProperties(this as any, { movementTimeout: parsedValue })
+                );
+              }}
+              isValidIntermediate={() => true}
+              isValidValue={(candidate: string) => Int.parse(new CodePointBuffer(candidate)) !== null}
+              numeric
+            />
           </Box>
+        </Box>
+        <Box>
+          <Typography sx={{ marginTop: "16px" }}>Robot Start</Typography>
+          <Box className="flex-editor-panel" sx={{ marginTop: "16px" }}>
+            <ObserverInput
+              label="X"
+              getValue={() => this.fieldOrigin.x.toUser().toString()}
+              setValue={(value: string) => {
+                const parsedValue = clampQuantity(
+                  parseFormula(value, NumberUOL.parse)!.compute(app.gc.uol),
+                  app.gc.uol,
+                  new Quantity(-180, UnitOfLength.Centimeter),
+                  new Quantity(180, UnitOfLength.Centimeter)
+                );
+
+                app.history.execute(
+                  `Change robot start X to ${parsedValue}`,
+                  new UpdateProperties(this.fieldOrigin, { x: parsedValue })
+                );
+              }}
+              isValidIntermediate={() => true}
+              isValidValue={(candidate: string) => parseFormula(candidate, NumberUOL.parse) !== null}
+              numeric
+            />
+            <ObserverInput
+              label="Y"
+              getValue={() => this.fieldOrigin.y.toUser().toString()}
+              setValue={(value: string) => {
+                const parsedValue = clampQuantity(
+                  parseFormula(value, NumberUOL.parse)!.compute(app.gc.uol),
+                  app.gc.uol,
+                  new Quantity(-180, UnitOfLength.Centimeter),
+                  new Quantity(180, UnitOfLength.Centimeter)
+                );
+
+                app.history.execute(
+                  `Change robot start Y to ${parsedValue}`,
+                  new UpdateProperties(this.fieldOrigin, { y: parsedValue })
+                );
+              }}
+              isValidIntermediate={() => true}
+              isValidValue={(candidate: string) => parseFormula(candidate, NumberUOL.parse) !== null}
+              numeric
+            />
+            <ObserverInput
+              label="Heading"
+              getValue={() => this.fieldOrigin.heading.toUser().toString()}
+              setValue={(value: string) => {
+                const parsedValue = parseFormula(value, NumberUOA.parse)!.compute(UnitOfAngle.Degree) % 360.0;
+
+                app.history.execute(
+                  `Change robot start heading to ${parsedValue}`,
+                  new UpdateProperties(this.fieldOrigin, { heading: parsedValue })
+                );
+              }}
+              isValidIntermediate={() => true}
+              isValidValue={(candidate: string) => parseFormula(candidate, NumberUOA.parse) !== null}
+              numeric
+            />
+          </Box>
+          <ObserverCheckbox label="Lock Robot Start to Path Start" checked={false} onCheckedChange={c => {}} />
         </Box>
       </>
     );
@@ -235,7 +297,9 @@ export class LemLibOdomGeneratorFormatV0_4 implements Format {
       for (const point of points) {
         // ALGO: Only coordinate points are supported in LemLibOdom format
         const relative = euclideanRotation(heading, point.subtract(offsets));
-        rtn += `${gc.chassisName}.moveTo(${uc.fromAtoB(relative.x).toUser()}, ${uc.fromAtoB(relative.y).toUser()}, ${gc.movementTimeout});\n`;
+        rtn += `${gc.chassisName}.moveTo(${uc.fromAtoB(relative.x).toUser()}, ${uc.fromAtoB(relative.y).toUser()}, ${
+          gc.movementTimeout
+        });\n`;
       }
     }
     return rtn;
