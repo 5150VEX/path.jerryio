@@ -57,7 +57,7 @@ class GeneralConfigImpl implements GeneralConfig {
   @Expose()
   movementTimeout: number = 5000;
   @Expose()
-  fieldOrigin: CoordinateWithHeading = { x: 0, y: 0, heading: 0 };
+  relativeCoords: boolean = true;
   @Exclude()
   private format_: LemLibOdomGeneratorFormatV0_4;
 
@@ -121,67 +121,16 @@ class GeneralConfigImpl implements GeneralConfig {
               numeric
             />
           </Box>
-        </Box>
-        <Box>
-          <Typography sx={{ marginTop: "16px" }}>Robot Start</Typography>
-          <Box className="flex-editor-panel" sx={{ marginTop: "16px" }}>
-            <ObserverInput
-              label="X"
-              getValue={() => this.fieldOrigin.x.toUser().toString()}
-              setValue={(value: string) => {
-                const parsedValue = clampQuantity(
-                  parseFormula(value, NumberUOL.parse)!.compute(app.gc.uol),
-                  app.gc.uol,
-                  new Quantity(-180, UnitOfLength.Centimeter),
-                  new Quantity(180, UnitOfLength.Centimeter)
-                );
-
-                app.history.execute(
-                  `Change robot start X to ${parsedValue}`,
-                  new UpdateProperties(this.fieldOrigin, { x: parsedValue })
-                );
-              }}
-              isValidIntermediate={() => true}
-              isValidValue={(candidate: string) => parseFormula(candidate, NumberUOL.parse) !== null}
-              numeric
-            />
-            <ObserverInput
-              label="Y"
-              getValue={() => this.fieldOrigin.y.toUser().toString()}
-              setValue={(value: string) => {
-                const parsedValue = clampQuantity(
-                  parseFormula(value, NumberUOL.parse)!.compute(app.gc.uol),
-                  app.gc.uol,
-                  new Quantity(-180, UnitOfLength.Centimeter),
-                  new Quantity(180, UnitOfLength.Centimeter)
-                );
-
-                app.history.execute(
-                  `Change robot start Y to ${parsedValue}`,
-                  new UpdateProperties(this.fieldOrigin, { y: parsedValue })
-                );
-              }}
-              isValidIntermediate={() => true}
-              isValidValue={(candidate: string) => parseFormula(candidate, NumberUOL.parse) !== null}
-              numeric
-            />
-            <ObserverInput
-              label="Heading"
-              getValue={() => this.fieldOrigin.heading.toUser().toString()}
-              setValue={(value: string) => {
-                const parsedValue = parseFormula(value, NumberUOA.parse)!.compute(UnitOfAngle.Degree) % 360.0;
-
-                app.history.execute(
-                  `Change robot start heading to ${parsedValue}`,
-                  new UpdateProperties(this.fieldOrigin, { heading: parsedValue })
-                );
-              }}
-              isValidIntermediate={() => true}
-              isValidValue={(candidate: string) => parseFormula(candidate, NumberUOA.parse) !== null}
-              numeric
-            />
-          </Box>
-          <ObserverCheckbox label="Lock Robot Start to Path Start" checked={false} onCheckedChange={c => {}} />
+          <ObserverCheckbox
+            label="Use Relative Coordinates"
+            checked={this.relativeCoords}
+            onCheckedChange={value => {
+              app.history.execute(
+                `Set relative coordinates ${value}`,
+                new UpdateProperties(this as any, { relativeCoords: value })
+              );
+            }}
+          />
         </Box>
       </>
     );
@@ -281,27 +230,30 @@ export class LemLibOdomGeneratorFormatV0_4 implements Format {
     if (path === undefined) throw new Error("No path to export");
     if (path.segments.length === 0) throw new Error("No segment to export");
 
+    
     const uc = new UnitConverter(this.gc.uol, UnitOfLength.Inch);
     const points = getDiscretePoints(path);
 
-    if (points.length > 0) {
-      const start = points[0];
-      let heading = 0;
+    let heading = 0;
 
+    // ALGO: Offsets to convert the absolute coordinates to the relative coordinates LemLib uses
+    let offsets = new Vector(0, 0);
+    if (gc.relativeCoords) {
+      const start = points[0];
+      offsets = new Vector(start.x, start.y);
       if (start.heading !== undefined) {
         heading = fromDegreeToRadian(start.heading);
       }
-
-      // ALGO: Offsets to convert the absolute coordinates to the relative coordinates LemLib uses
-      const offsets = new Vector(start.x, start.y);
-      for (const point of points) {
-        // ALGO: Only coordinate points are supported in LemLibOdom format
-        const relative = euclideanRotation(heading, point.subtract(offsets));
-        rtn += `${gc.chassisName}.moveTo(${uc.fromAtoB(relative.x).toUser()}, ${uc.fromAtoB(relative.y).toUser()}, ${
-          gc.movementTimeout
-        });\n`;
-      }
     }
+
+    for (const point of points) {
+      // ALGO: Only coordinate points are supported in LemLibOdom format
+      const relative = euclideanRotation(heading, point.subtract(offsets));
+      rtn += `${gc.chassisName}.moveTo(${uc.fromAtoB(relative.x).toUser()}, ${uc.fromAtoB(relative.y).toUser()}, ${
+        gc.movementTimeout
+      });\n`;
+    }
+
     return rtn;
   }
 
