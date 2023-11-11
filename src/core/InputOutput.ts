@@ -1,6 +1,7 @@
 import { getAppStores } from "./MainApp";
 import { enqueueErrorSnackbar, enqueueSuccessSnackbar } from "../app/Notice";
 import { Logger } from "./Logger";
+import { enqueueSnackbar } from "notistack";
 
 const logger = Logger("I/O");
 
@@ -338,4 +339,14 @@ export async function onDropFile(file: File, saveCheck: boolean = true): Promise
     enqueueErrorSnackbar(logger, err);
     return false;
   }
+}
+
+export async function onCopyToClipboard(): Promise<boolean> {
+  const code = exportPathFile();
+  if (code === undefined) {
+    return false;
+  }
+  navigator.clipboard.writeText(code);
+  enqueueSnackbar("Copied code to clipboard", { variant: "success", autoHideDuration: 2000 })
+  return true;
 }

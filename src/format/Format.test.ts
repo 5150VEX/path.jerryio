@@ -8,7 +8,6 @@ import { PointCalculationResult } from "../core/Calculation";
 import { GeneralConfig } from "./Config";
 import { CustomGeneralConfig, CustomPathConfig } from "./Config.test";
 import { HistoryEventMap, CancellableCommand } from "../core/Command";
-import { LemLibFormatV1_0, LemLibPathConfig } from "./LemLibFormatV1_0";
 
 export class CustomFormat implements Format {
   isInit: boolean;
@@ -201,18 +200,3 @@ test("Class transform", () => {
   expect(result.attr11).toEqual(456);
 });
 
-test("LemLibFormatV1_0", () => {
-  const format = new LemLibFormatV1_0();
-
-  const path = format.createPath();
-
-  const pc = path.pc as LemLibPathConfig;
-
-  const json = instanceToPlain(pc);
-
-  const path2 = format.createPath();
-  const pc2 = path2.pc as LemLibPathConfig;
-  plainToClassFromExist(pc2, json);
-
-  console.log("json", json);
-});
