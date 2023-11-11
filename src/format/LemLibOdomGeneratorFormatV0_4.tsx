@@ -1,7 +1,7 @@
 import { makeAutoObservable, reaction, action, intercept } from "mobx";
 import { getAppStores } from "../core/MainApp";
 import { ValidateNumber, makeId } from "../core/Util";
-import { Path, Segment, Vector } from "../core/Path";
+import { EndControl, Path, Segment, Vector } from "../core/Path";
 import { UnitOfLength, UnitConverter, Quantity } from "../core/Unit";
 import { GeneralConfig, PathConfig, convertGeneralConfigUOL } from "./Config";
 import { Format, PathFileData } from "./Format";
@@ -210,8 +210,27 @@ export class LemLibOdomGeneratorFormatV0_4 implements Format {
     return result;
   }
 
-  recoverPathFileData(_: string): PathFileData {
-    throw new Error("Loading paths is not supported in this format");
+  recoverPathFileData(data: string): PathFileData {
+    const lines = data
+      .replace(/.*\.moveTo/g, "")
+      .replace(/[();]/g, "")
+      .split(/\r?\n/)
+      .map(line => line.split(/[/s,]/));
+
+    const values = lines
+      .map(coords => new Vector(parseFloat(coords[0]), parseFloat(coords[1])))
+      .filter(vec => !isNaN(vec.x) && !isNaN(vec.y));
+
+    let path = this.createPath();
+    for (let i = 1; i < values.length; i++) {
+      const prev = values[i - 1];
+      const curr = values[i];
+      const segment = new Segment(new EndControl(prev.x, prev.y, 0), new EndControl(curr.x, curr.y, 0));
+      path.segments.push(segment);
+    }
+
+    const paths = [path];
+    return { gc: this.gc, paths };
   }
 
   exportPathFile(): string {
