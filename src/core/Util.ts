@@ -116,3 +116,96 @@ export function ValidateNumber(validateFunc: (num: number) => boolean, validatio
 export function hex(input: Uint8Array) {
   return [...input].map(x => x.toString(16).padStart(2, "0")).join("");
 }
+
+export interface NumberMark {
+  value: number;
+  label: string;
+}
+
+export interface NumberRange {
+  from: number;
+  to: number;
+}
+
+export interface EditableNumberRange extends NumberRange {
+  minLimit: NumberMark;
+  maxLimit: NumberMark;
+  step: number;
+}
+
+export function isNumberMark(value: any): value is NumberMark {
+  return (
+    typeof value === "object" && value !== null && typeof value.value === "number" && typeof value.label === "string"
+  );
+}
+
+export function isEditableNumberRange(value: any): value is EditableNumberRange {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    isNumberMark(value.minLimit) &&
+    isNumberMark(value.maxLimit) &&
+    typeof value.step === "number" &&
+    typeof value.from === "number" &&
+    typeof value.to === "number"
+  );
+}
+
+export function ValidateEditableNumberRange(min: number, max: number, validationOptions?: ValidationOptions) {
+  return function (target: Object, propertyName: string) {
+    registerDecorator({
+      name: "ValidateEditableNumberRange",
+      target: target.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      constraints: [min, max],
+      validator: {
+        validate(value: any, args: ValidationArguments) {
+          const minValue: number = args.constraints[0];
+          const maxValue: number = args.constraints[1];
+          if (isEditableNumberRange(value)) {
+            return (
+              minValue <= maxValue &&
+              value.minLimit.value <= value.maxLimit.value &&
+              value.minLimit.value >= minValue &&
+              value.maxLimit.value <= maxValue &&
+              value.step > 0 &&
+              value.from <= value.to &&
+              value.from >= value.minLimit.value &&
+              value.to <= value.maxLimit.value
+            );
+          } else {
+            return false;
+          }
+        },
+        defaultMessage(args: ValidationArguments) {
+          const minValue: number = args.constraints[0];
+          const maxValue: number = args.constraints[1];
+          return `The ${args.property} must be a valid NumberRange object with minLimit.value >= ${minValue}, maxLimit.value <= ${maxValue}, and step > 0`;
+        }
+      }
+    });
+  };
+}
+
+export function getMacHotKeyString(hotkey: string): string {
+  return hotkey
+    .replaceAll("Mod", "⌘")
+    .replaceAll("Option", "⌥")
+    .replaceAll("Ctrl", "⌃")
+    .replaceAll("Shift", "⇧")
+    .replaceAll("CapsLock", "⇪")
+    .replaceAll("ArrowLeft", "←")
+    .replaceAll("ArrowRight", "→")
+    .replaceAll("ArrowUp", "↑")
+    .replaceAll("ArrowDown", "↓")
+    .replaceAll("Tab", "⇥")
+    .replaceAll("Del", "⌫")
+    .replaceAll(" ", "␣")
+    .replaceAll("Esc", "") // Hide escape key
+    .replaceAll("+", "")
+    .replaceAll("Add", "+")
+    .replaceAll("Equal", "+")
+    .replaceAll("Subtract", "-")
+    .replaceAll("Minus", "-");
+}

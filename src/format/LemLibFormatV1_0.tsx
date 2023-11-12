@@ -1,26 +1,162 @@
 import { makeAutoObservable, reaction, action, intercept } from "mobx";
-import { getAppStores } from "../core/MainApp";
-import { EditableNumberRange, ValidateEditableNumberRange, ValidateNumber, clamp, makeId } from "../core/Util";
-import { Control, EndControl, Path, Segment, SpeedKeyframe, Vector } from "../core/Path";
-import { UnitOfLength, UnitConverter, Quantity } from "../core/Unit";
-import { GeneralConfig, PathConfig, convertGeneralConfigUOL, convertPathConfigPointDensity } from "./Config";
-import { Format, PathFileData } from "./Format";
-import { Box, Slider, Typography } from "@mui/material";
+import { Box, Typography, Slider } from "@mui/material";
+import { Expose, Exclude, Type } from "class-transformer";
 import { RangeSlider } from "../component/RangeSlider";
 import { AddKeyframe, CancellableCommand, HistoryEventMap, UpdateProperties } from "../core/Command";
-import { Exclude, Expose, Type } from "class-transformer";
-import { IsBoolean, IsObject, IsPositive, ValidateNested } from "class-validator";
-import { PointCalculationResult, getPathPoints } from "../core/Calculation";
-import { FieldImageOriginType, FieldImageSignatureAndOrigin, getDefaultBuiltInFieldImage } from "../core/Asset";
+import { getAppStores } from "../core/MainApp";
+import { Path, Segment, SpeedKeyframe } from "../core/Path";
+import { EditableNumberRange, NumberRange, ValidateEditableNumberRange, ValidateNumber, makeId } from "../core/Util";
+import { GeneralConfig, PathConfig, convertGeneralConfigUOL, convertPathConfigPointDensity } from "./Config";
+import { IsPositive, IsBoolean, ValidateNested, IsObject } from "class-validator";
+import { FieldImageSignatureAndOrigin, FieldImageOriginType, getDefaultBuiltInFieldImage } from "../core/Asset";
+import { Quantity, UnitConverter, UnitOfLength } from "../core/Unit";
+import { Format, PathFileData } from "./Format";
+import { PointCalculationResult, fromDegreeToRadian, fromRadiansToDegree, getPathPoints } from "../core/Calculation";
+import { SmartBuffer } from "smart-buffer";
+
+export namespace LemLibV1_0 {
+  export interface LemLibWaypoint {
+    x: number; // mm
+    y: number; // mm
+    speed: number; // m/s
+    heading?: number;
+    lookahead?: number; // mm
+  }
+
+  export interface LemLibPathData {
+    name: string;
+    waypoints: LemLibWaypoint[];
+  }
+
+  export function writeWaypoint(buffer: SmartBuffer, waypoint: LemLibWaypoint) {
+    let flag = 0;
+    if (waypoint.heading !== undefined) flag |= 0x01;
+    if (waypoint.lookahead !== undefined) flag |= 0x02;
+    buffer.writeInt8(flag);
+    buffer.writeInt16LE(Math.round(waypoint.x * 2));
+    buffer.writeInt16LE(Math.round(waypoint.y * 2));
+    buffer.writeInt16LE(Math.round(waypoint.speed * 1000));
+    if (waypoint.heading !== undefined) {
+      // From [0, 360) to [0~6.2832]
+      const rad = fromDegreeToRadian(waypoint.heading);
+      const rad2 = Math.max(0, Math.min(rad, 6.2832));
+      buffer.writeUInt16LE(Math.round(rad2 * 10000));
+    }
+    if (waypoint.lookahead !== undefined) {
+      buffer.writeInt16LE(Math.round(waypoint.lookahead * 2));
+    }
+  }
+
+  export function readWaypoint(buffer: SmartBuffer): LemLibWaypoint {
+    const flag = buffer.readInt8();
+    const waypoint: LemLibWaypoint = {
+      x: buffer.readInt16LE() / 2,
+      y: buffer.readInt16LE() / 2,
+      speed: buffer.readInt16LE() / 1000
+    };
+    if (flag & 0x01) {
+      // From [0~6.2832] to [0, 360)
+      const rad = buffer.readUInt16LE() / 10000;
+      const deg = fromRadiansToDegree(rad);
+      waypoint.heading = deg;
+    }
+    if (flag & 0x02) {
+      waypoint.lookahead = buffer.readInt16LE() / 2;
+    }
+    if (flag & 0x04) buffer.readInt16LE(); // Reserved
+    if (flag & 0x08) buffer.readInt16LE(); // Reserved
+    if (flag & 0x10) buffer.readInt16LE(); // Reserved
+    if (flag & 0x20) buffer.readInt16LE(); // Reserved
+    if (flag & 0x40) buffer.readInt16LE(); // Reserved
+    if (flag & 0x80) buffer.readInt16LE(); // Reserved
+
+    return waypoint;
+  }
+
+  export function writePath(buffer: SmartBuffer, path: Path) {
+    buffer.writeStringNT(path.name);
+    buffer.writeInt8(0);
+    // No metadata
+    const result = path.pc.format.getPathPoints(path);
+    const points = result.points;
+    buffer.writeUInt16LE(points.length);
+    points.forEach(point => {
+      writeWaypoint(buffer, point);
+    });
+  }
+
+  export function readPath(buffer: SmartBuffer): LemLibPathData {
+    const name = buffer.readStringNT();
+    const metadataSize = buffer.readInt8();
+    if (metadataSize > 0) {
+      buffer.readBuffer(metadataSize);
+    }
+    const numPoints = buffer.readUInt16LE();
+    const waypoints: LemLibWaypoint[] = [];
+    for (let i = 0; i < numPoints; i++) {
+      waypoints.push(readWaypoint(buffer));
+    }
+    return { name, waypoints };
+  }
+
+  export function writePathFile(buffer: SmartBuffer, paths: Path[], pathFileData: Record<string, any>) {
+    const bodyBeginIdx = buffer.writeOffset;
+    buffer.writeUInt8(4); // Metadata size
+    const metadataStartIdx = buffer.writeOffset;
+    buffer.writeUInt32LE(0); // Placeholder
+
+    buffer.writeUInt16LE(paths.length);
+    paths.forEach(path => {
+      writePath(buffer, path);
+    });
+
+    // The first 4 bytes of metadata is the pointer to the end of the body
+    // The reader will use this pointer to skip the body and read the PATH.JERRYIO-DATA metadata
+    const sizeOfBody = buffer.writeOffset - bodyBeginIdx;
+    buffer.writeUInt32LE(sizeOfBody, metadataStartIdx);
+    buffer.writeStringNT("#PATH.JERRYIO-DATA");
+    buffer.writeString(JSON.stringify(pathFileData));
+  }
+
+  export function readPathFile(
+    buffer: SmartBuffer
+  ): { paths: LemLibPathData[]; pathFileData: Record<string, any> } | undefined {
+    const bodyBeginIdx = buffer.readOffset;
+    const metadataSize = buffer.readUInt8();
+    const metadataStartIdx = buffer.readOffset;
+    const metadataEndIdx = metadataStartIdx + metadataSize;
+    const sizeOfBody = buffer.readUInt32LE();
+    buffer.readOffset = metadataEndIdx;
+
+    const paths: LemLibPathData[] = [];
+    const numPaths = buffer.readUInt16LE();
+    for (let i = 0; i < numPaths; i++) {
+      paths.push(readPath(buffer));
+    }
+
+    buffer.readOffset = bodyBeginIdx + sizeOfBody;
+    const signature = buffer.readStringNT();
+    if (signature !== "#PATH.JERRYIO-DATA") return undefined;
+
+    try {
+      const pathFileData = JSON.parse(buffer.readString());
+      return { paths, pathFileData };
+    } catch (e) {
+      return undefined;
+    }
+  }
+}
+
+export interface LemLibPathConfig extends PathConfig {}
 
 // observable class
 class GeneralConfigImpl implements GeneralConfig {
   @IsPositive()
   @Expose()
-  robotWidth: number = 12;
+  robotWidth: number = 300;
   @IsPositive()
   @Expose()
-  robotHeight: number = 12;
+  robotHeight: number = 300;
   @IsBoolean()
   @Expose()
   robotIsHolonomic: boolean = false;
@@ -29,13 +165,13 @@ class GeneralConfigImpl implements GeneralConfig {
   showRobot: boolean = false;
   @ValidateNumber(num => num > 0 && num <= 1000) // Don't use IsEnum
   @Expose()
-  uol: UnitOfLength = UnitOfLength.Inch;
+  uol: UnitOfLength = UnitOfLength.Millimeter;
   @IsPositive()
   @Expose()
-  pointDensity: number = 2; // inches
+  pointDensity: number = 10; // inches
   @IsPositive()
   @Expose()
-  controlMagnetDistance: number = 5 / 2.54;
+  controlMagnetDistance: number = 50;
   @Type(() => FieldImageSignatureAndOrigin)
   @ValidateNested()
   @IsObject()
@@ -44,9 +180,9 @@ class GeneralConfigImpl implements GeneralConfig {
     getDefaultBuiltInFieldImage().getSignatureAndOrigin();
 
   @Exclude()
-  private format_: LemLibFormatV0_4;
+  private format_: LemLibFormatV1_0;
 
-  constructor(format: LemLibFormatV0_4) {
+  constructor(format: LemLibFormatV1_0) {
     this.format_ = format;
     makeAutoObservable(this);
 
@@ -78,36 +214,43 @@ class GeneralConfigImpl implements GeneralConfig {
 }
 
 // observable class
-class PathConfigImpl implements PathConfig {
+class PathConfigImpl implements LemLibPathConfig {
+  @Exclude()
+  readonly lookaheadLimit: NumberRange = {
+    from: 10,
+    to: 1000
+  };
+
   @ValidateEditableNumberRange(-Infinity, Infinity)
   @Expose()
   speedLimit: EditableNumberRange = {
     minLimit: { value: 0, label: "0" },
-    maxLimit: { value: 127, label: "127" },
-    step: 1,
-    from: 20,
-    to: 100
+    // maxLimit: { value: 32.767, label: "32.767" },
+    maxLimit: { value: 10, label: "10" },
+    step: 0.05,
+    from: 0.5,
+    to: 1.0
   };
   @ValidateEditableNumberRange(-Infinity, Infinity)
   @Expose()
   bentRateApplicableRange: EditableNumberRange = {
     minLimit: { value: 0, label: "0" },
-    maxLimit: { value: 4, label: "4" },
-    step: 0.01,
-    from: 1.4,
-    to: 1.8
+    maxLimit: { value: 50, label: "50" },
+    step: 1,
+    from: 14,
+    to: 18
   };
-  @ValidateNumber(num => num >= 0.1 && num <= 255)
+  @ValidateNumber(num => num >= 0.05 && num <= 10)
   @Expose()
-  maxDecelerationRate: number = 127;
+  maxDecelerationRate: number = 1;
 
   @Exclude()
-  readonly format: LemLibFormatV0_4;
+  readonly format: LemLibFormatV1_0;
 
   @Exclude()
   public path!: Path;
 
-  constructor(format: LemLibFormatV0_4) {
+  constructor(format: LemLibFormatV1_0) {
     this.format = format;
     makeAutoObservable(this);
 
@@ -170,13 +313,14 @@ class PathConfigImpl implements PathConfig {
             })}
           />
         </Box>
+        {/* TODO show button to show Lookahead Graph */}
       </>
     );
   }
 }
 
 // observable class
-export class LemLibFormatV0_4 implements Format {
+export class LemLibFormatV1_0 implements Format {
   isInit: boolean = false;
   uid: string;
 
@@ -189,11 +333,11 @@ export class LemLibFormatV0_4 implements Format {
   }
 
   createNewInstance(): Format {
-    return new LemLibFormatV0_4();
+    return new LemLibFormatV1_0();
   }
 
   getName(): string {
-    return "LemLib v0.4.x (inch, byte-voltage)";
+    return "LemLib v1.0.0 (mm, m/s)";
   }
 
   init(): void {
@@ -242,142 +386,17 @@ export class LemLibFormatV0_4 implements Format {
   }
 
   recoverPathFileData(fileContent: string): PathFileData {
-    // ALGO: The implementation is adopted from https://github.com/LemLib/Path-Gen under the GPLv3 license.
-
-    const paths: Path[] = [];
-
-    // find the first line that is "endData"
-    const lines = fileContent.split("\n");
-
-    let i = lines.findIndex(line => line === "endData");
-    if (i === -1) throw new Error("Invalid file format, unable to find line 'endData'");
-
-    const maxDecelerationRate = Number(lines[i + 1]);
-    if (isNaN(maxDecelerationRate)) throw new Error("Invalid file format, unable to parse max deceleration rate");
-
-    const maxSpeed = Number(lines[i + 2]);
-    if (isNaN(maxSpeed)) throw new Error("Invalid file format, unable to parse max speed");
-
-    // i + 3 Multiplier not supported.
-
-    i += 4;
-
-    const error = () => {
-      throw new Error("Invalid file format, unable to parse segment at line " + (i + 1));
-    };
-
-    const num = (str: string): number => {
-      const num = Number(str);
-      if (isNaN(num)) error();
-      return num; // ALGO: removed fix precision
-    };
-
-    const push = (segment: Segment) => {
-      // check if there is a path
-      if (paths.length === 0) {
-        const path = this.createPath(segment);
-        path.pc.speedLimit.to = clamp(
-          maxSpeed.toUser(),
-          path.pc.speedLimit.minLimit.value,
-          path.pc.speedLimit.maxLimit.value
-        );
-        (path.pc as PathConfigImpl).maxDecelerationRate = maxDecelerationRate;
-        paths.push(path);
-      } else {
-        const path = paths[paths.length - 1];
-        const lastSegment = path.segments[path.segments.length - 1];
-        const a = lastSegment.last;
-        const b = segment.first;
-
-        if (a.x !== b.x || a.y !== b.y) error();
-
-        path.segments.push(segment);
-      }
-    };
-
-    while (i < lines.length - 1) {
-      // ALGO: the last line is always empty, follow the original implementation.
-      const line = lines[i];
-      const tokens = line.split(", ");
-      if (tokens.length !== 8) error();
-
-      const p1 = new EndControl(num(tokens[0]), num(tokens[1]), 0);
-      const p2 = new Control(num(tokens[2]), num(tokens[3]));
-      const p3 = new Control(num(tokens[4]), num(tokens[5]));
-      const p4 = new EndControl(num(tokens[6]), num(tokens[7]), 0);
-      const segment = new Segment(p1, p2, p3, p4);
-      push(segment);
-
-      i++;
-    }
-
-    return { gc: this.gc, paths };
+    throw new Error("Unable to recover path file data from this format, try other formats?");
   }
 
   exportPathFile(): string {
     const { app } = getAppStores();
 
-    // ALGO: The implementation is adopted from https://github.com/LemLib/Path-Gen under the GPLv3 license.
+    // ALGO: The implementation is adopted from https://github.com/LemLib/path under the MIT license.
 
     let rtn = "";
 
-    const path = app.interestedPath();
-    if (path === undefined) throw new Error("No path to export");
-    if (path.segments.length === 0) throw new Error("No segment to export");
-
-    const uc = new UnitConverter(this.gc.uol, UnitOfLength.Inch);
-
-    const points = this.getPathPoints(path).points;
-    for (const point of points) {
-      // ALGO: heading is not supported in LemLib V0.4 format.
-      rtn += `${uc.fromAtoB(point.x).toUser()}, ${uc.fromAtoB(point.y).toUser()}, ${point.speed.toUser()}\n`;
-    }
-
-    if (points.length < 3) throw new Error("The path is too short to export");
-
-    /*
-    Here is the original code of how the ghost point is calculated:
-
-    ```cpp
-    // create a "ghost point" at the end of the path to make stopping nicer
-    const lastPoint = path.points[path.points.length-1];
-    const lastControl = path.segments[path.segments.length-1].p2;
-    const ghostPoint = Vector.interpolate(Vector.distance(lastControl, lastPoint) + 20, lastControl, lastPoint);
-    ```
-
-    Notice that the variable "lastControl" is not the last control point, but the second last control point.
-    This implementation is different from the original implementation by using the last point and the second last point.
-    */
-    // ALGO: use second and third last points, since first and second last point are always identical
-    const last2 = points[points.length - 3]; // third last point, last point by the calculation
-    const last1 = points[points.length - 2]; // second last point, also the last control point
-    // ALGO: The 20 inches constant is a constant value in the original LemLib-Path-Gen implementation.
-    const ghostPoint = last2.interpolate(last1, last2.distance(last1) + uc.fromBtoA(20));
-    rtn += `${uc.fromAtoB(ghostPoint.x).toUser()}, ${uc.fromAtoB(ghostPoint.y).toUser()}, 0\n`;
-
-    rtn += `endData\n`;
-    rtn += `${(path.pc as PathConfigImpl).maxDecelerationRate}\n`;
-    rtn += `${path.pc.speedLimit.to}\n`;
-    rtn += `200\n`; // Not supported
-
-    function output(control: Vector, postfix: string = ", ") {
-      rtn += `${uc.fromAtoB(control.x).toUser()}, ${uc.fromAtoB(control.y).toUser()}${postfix}`;
-    }
-
-    for (const segment of path.segments) {
-      if (segment.controls.length === 4) {
-        output(segment.controls[0]);
-        output(segment.controls[1]);
-        output(segment.controls[2]);
-        output(segment.controls[3], "\n");
-      } else if (segment.controls.length === 2) {
-        const center = segment.controls[0].add(segment.controls[1]).divide(2);
-        output(segment.controls[0]);
-        output(center);
-        output(center);
-        output(segment.controls[1], "\n");
-      }
-    }
+    // TODO
 
     rtn += "#PATH.JERRYIO-DATA " + JSON.stringify(app.exportPathFileData());
 
