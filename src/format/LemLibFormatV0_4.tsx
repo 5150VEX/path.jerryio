@@ -1,12 +1,12 @@
 import { makeAutoObservable, reaction, action, intercept } from "mobx";
 import { getAppStores } from "../core/MainApp";
-import { EditableNumberRange, ValidateEditableNumberRange, ValidateNumber, clamp, makeId } from "../core/Util";
+import { ValidateNumber, clamp, makeId } from "../core/Util";
 import { Control, EndControl, Path, Segment, SpeedKeyframe, Vector } from "../core/Path";
 import { UnitOfLength, UnitConverter, Quantity } from "../core/Unit";
 import { GeneralConfig, PathConfig, convertGeneralConfigUOL, convertPathConfigPointDensity } from "./Config";
 import { Format, PathFileData } from "./Format";
 import { Box, Slider, Typography } from "@mui/material";
-import { RangeSlider } from "../component/RangeSlider";
+import { NumberRange, RangeSlider, ValidateNumberRange } from "../component/RangeSlider";
 import { AddKeyframe, CancellableCommand, HistoryEventMap, UpdateProperties } from "../core/Command";
 import { Exclude, Expose, Type } from "class-transformer";
 import { IsBoolean, IsObject, IsPositive, ValidateNested } from "class-validator";
@@ -79,18 +79,18 @@ class GeneralConfigImpl implements GeneralConfig {
 
 // observable class
 class PathConfigImpl implements PathConfig {
-  @ValidateEditableNumberRange(-Infinity, Infinity)
+  @ValidateNumberRange(-Infinity, Infinity)
   @Expose()
-  speedLimit: EditableNumberRange = {
+  speedLimit: NumberRange = {
     minLimit: { value: 0, label: "0" },
     maxLimit: { value: 127, label: "127" },
     step: 1,
     from: 20,
     to: 100
   };
-  @ValidateEditableNumberRange(-Infinity, Infinity)
+  @ValidateNumberRange(-Infinity, Infinity)
   @Expose()
-  bentRateApplicableRange: EditableNumberRange = {
+  bentRateApplicableRange: NumberRange = {
     minLimit: { value: 0, label: "0" },
     maxLimit: { value: 4, label: "4" },
     step: 0.01,
@@ -205,12 +205,6 @@ export class LemLibFormatV0_4 implements Format {
         const keyframe = event.command.keyframe;
         if (keyframe instanceof SpeedKeyframe) {
           keyframe.followBentRate = true;
-        }
-      } else if (event.isCommandInstanceOf(UpdateProperties)) {
-        const target = event.command.target;
-        const newValues = event.command.newValues;
-        if (target instanceof Path && "name" in newValues) {
-          newValues.name = newValues.name.replace(/[^\x00-\x7F]/g, ""); // ascii only
         }
       }
     });

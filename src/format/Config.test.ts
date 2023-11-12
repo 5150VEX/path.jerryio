@@ -2,11 +2,12 @@ import { makeAutoObservable } from "mobx";
 
 import { Expose, Exclude, plainToClassFromExist, Type } from "class-transformer";
 import { IsBoolean, IsObject, IsPositive, ValidateNested, validate } from "class-validator";
+import { NumberRange, ValidateNumberRange } from "../component/RangeSlider";
 import { Path } from "../core/Path";
 import { UnitOfLength } from "../core/Unit";
 import { GeneralConfig, PathConfig } from "./Config";
 import { Format } from "./Format";
-import { EditableNumberRange, ValidateEditableNumberRange, ValidateNumber } from "../core/Util";
+import { ValidateNumber } from "../core/Util";
 import { CustomFormat } from "./Format.test";
 import { FieldImageOriginType, FieldImageSignatureAndOrigin, getDefaultBuiltInFieldImage } from "../core/Asset";
 
@@ -61,9 +62,9 @@ export class CustomPathConfig implements PathConfig {
   @Exclude()
   public path!: Path;
 
-  @ValidateEditableNumberRange(-Infinity, Infinity)
+  @ValidateNumberRange(-Infinity, Infinity)
   @Expose()
-  speedLimit: EditableNumberRange = {
+  speedLimit: NumberRange = {
     minLimit: { value: 0, label: "0" },
     maxLimit: { value: 127, label: "127" },
     step: 1,
@@ -71,9 +72,9 @@ export class CustomPathConfig implements PathConfig {
     to: 100
   };
 
-  @ValidateEditableNumberRange(-Infinity, Infinity)
+  @ValidateNumberRange(-Infinity, Infinity)
   @Expose()
-  bentRateApplicableRange: EditableNumberRange = {
+  bentRateApplicableRange: NumberRange = {
     minLimit: { value: 0, label: "0" },
     maxLimit: { value: 4, label: "4" },
     step: 0.01,

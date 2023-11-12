@@ -1,8 +1,9 @@
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { NumberRange } from "../component/RangeSlider";
 import { UnitConverter, UnitOfLength } from "../core/Unit";
 import { Format } from "./Format";
 import { Path } from "../core/Path";
 import { FieldImageOriginType, FieldImageSignatureAndOrigin } from "../core/Asset";
-import { EditableNumberRange, NumberRange } from "../core/Util";
 
 export function convertGeneralConfigUOL(gc: GeneralConfig, fromUOL: UnitOfLength) {
   const toUOL = gc.uol;
@@ -44,7 +45,6 @@ export interface GeneralConfig extends ConfigSection {
 
 export interface PathConfig extends ConfigSection {
   path: Path;
-  lookaheadLimit?: NumberRange;
-  speedLimit: EditableNumberRange;
-  bentRateApplicableRange: EditableNumberRange;
+  speedLimit: NumberRange;
+  bentRateApplicableRange: NumberRange;
 }

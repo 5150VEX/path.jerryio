@@ -17,8 +17,8 @@ import {
 import { observer } from "mobx-react-lite";
 
 import React, { forwardRef } from "react";
-import { IS_MAC_OS, getMacHotKeyString, makeId } from "../core/Util";
-import { onDownload, onDownloadAs, onNew, onOpen, onSave, onSaveAs } from "../core/InputOutput";
+import { IS_MAC_OS, makeId } from "../core/Util";
+import { onCopyToClipboard, onDownload, onDownloadAs, onNew, onOpen, onSave, onSaveAs } from "../core/InputOutput";
 import { getAppStores } from "../core/MainApp";
 import { AppThemeType } from "./Theme";
 import { RemovePathsAndEndControls } from "../core/Command";
@@ -39,7 +39,25 @@ const HotkeyTypography = observer((props: { hotkey: string | undefined }) => {
   if (IS_MAC_OS === false)
     return <Typography variant="body2" color="text.secondary" children={hotkey.replaceAll("Mod", "Ctrl")} />;
 
-  const temp = getMacHotKeyString(hotkey);
+  const temp = hotkey
+    .replaceAll("Mod", "⌘")
+    .replaceAll("Option", "⌥")
+    .replaceAll("Ctrl", "⌃")
+    .replaceAll("Shift", "⇧")
+    .replaceAll("CapsLock", "⇪")
+    .replaceAll("ArrowLeft", "←")
+    .replaceAll("ArrowRight", "→")
+    .replaceAll("ArrowUp", "↑")
+    .replaceAll("ArrowDown", "↓")
+    .replaceAll("Tab", "⇥")
+    .replaceAll("Del", "⌫")
+    .replaceAll(" ", "␣")
+    .replaceAll("Esc", "") // Hide escape key
+    .replaceAll("+", "")
+    .replaceAll("Add", "+")
+    .replaceAll("Equal", "+")
+    .replaceAll("Subtract", "-")
+    .replaceAll("Minus", "-");
 
   const elements: React.ReactElement[] = [];
   temp.split("").forEach((char, index) => {

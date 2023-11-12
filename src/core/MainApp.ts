@@ -3,8 +3,7 @@ import DOMPurify from "dompurify"; // cspell:disable-line
 import { GeneralConfig, convertGeneralConfigUOL, convertPathConfigPointDensity } from "../format/Config";
 import { AnyControl, EndControl, Path, PathTreeItem, Vector, relatedPaths, traversal } from "./Path";
 import { addToArray, removeFromArray, runInActionAsync } from "./Util";
-import { PathFileData, Format, convertPathFileData, getAllFormats } from "../format/Format";
-import { promptFieldImage } from "./FieldImagePrompt";
+import { PathFileData, Format, convertPathFileData, getAllFormats, promptFieldImage } from "../format/Format";
 import { PathDotJerryioFormatV0_1 } from "../format/PathDotJerryioFormatV0_1";
 import { instanceToPlain, plainToClassFromExist } from "class-transformer";
 import { Quantity, UnitConverter, UnitOfLength } from "./Unit";
@@ -331,7 +330,7 @@ export class MainApp {
     this.expanded = [];
     for (const path of pfd.paths) {
       // SECURITY: Sanitize path names, beware of XSS attack from the path file
-      const temp = purify.sanitize(path.name, { ALLOWED_TAGS: [] });
+      const temp = purify.sanitize(path.name);
       path.name = temp === "" ? "Path" : temp;
 
       // ALGO: Link the first vector of each segment to the last vector of the previous segment

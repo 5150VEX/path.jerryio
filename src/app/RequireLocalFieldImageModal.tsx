@@ -6,7 +6,7 @@ import { Card, Typography, Box, Button } from "@mui/material";
 import { MuiFileInput } from "mui-file-input";
 import { Modal } from "../component/Modal";
 import React from "react";
-import { RequireLocalFieldImageModalSymbol } from "../core/FieldImagePrompt";
+import { RequireLocalFieldImageModalSymbol } from "../format/Format";
 
 export const RequireLocalFieldImageModal = observer(() => {
   const { assetManager, modals } = getAppStores();
