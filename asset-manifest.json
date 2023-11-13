@@ -1,0 +1,20 @@
+{
+  "files": {
+    "main.css": "/path.jerryio/static/css/main.2f687ce2.css",
+    "main.js": "/path.jerryio/static/js/main.56efb79d.js",
+    "static/media/field2024.png": "/path.jerryio/static/media/field2024.727e1d2a8cd30e2b1fcd.png",
+    "static/media/field-perimeter.png": "/path.jerryio/static/media/field-perimeter.ba0106af506e862bdac6.png",
+    "service-worker.js": "/path.jerryio/service-worker.js",
+    "static/media/terms-and-concept.png": "/path.jerryio/static/media/terms-and-concept.afb6be68109fd389fb81.png",
+    "static/favicon.ico": "/path.jerryio/static/favicon.ico",
+    "static/logo464.svg": "/path.jerryio/static/logo464.svg",
+    "static/media/terms-and-concept.svg": "/path.jerryio/static/media/terms-and-concept.d6f1b1f0390b8b58fd12e4570192987d.svg",
+    "index.html": "/path.jerryio/index.html",
+    "main.2f687ce2.css.map": "/path.jerryio/static/css/main.2f687ce2.css.map",
+    "main.56efb79d.js.map": "/path.jerryio/static/js/main.56efb79d.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.2f687ce2.css",
+    "static/js/main.56efb79d.js"
+  ]
+}
