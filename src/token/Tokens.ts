@@ -498,12 +498,6 @@ export class PositiveInt extends Token {
 
     let rtn = "";
 
-    const d1t9 = Digit1To9.parse(buffer);
-    if (!d1t9) {
-      return buffer.rollbackAndReturn(null);
-    }
-    rtn += d1t9.value;
-
     let d0t9;
     while ((d0t9 = Digit.parse(buffer)) !== null) {
       rtn += d0t9.value;
